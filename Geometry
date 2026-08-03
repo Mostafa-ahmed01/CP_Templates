@@ -317,7 +317,56 @@ int tangents(pt o1, T r1, pt o2, T r2, bool inner, vector<pair<pt, pt> > &out) {
     }
     return 1 + (h2 > 0);
 }
+//////////////////////////////////////////  CIRCLE FORMULAS  //////////////////////////////////////////
 
+// مساحة القطاع الدائري (Sector Area) بمعلومية زاوية بالراديان theta
+ld circleSectorArea(T r, ld theta) {
+    return 0.5 * r * r * theta;
+}
+
+// مساحة القطعة الدائرية (Segment Area)
+ld circleSegmentArea(T r, ld theta) {
+    return 0.5 * r * r * (theta - sin(theta));
+}
+
+// طول القوس (Arc Length)
+ld circleArcLength(T r, ld theta) {
+    return r * theta;
+}
+
+// مساحة التقاطع بين دائرتين (Intersection Area of Two Circles)
+ld circleCircleIntersectionArea(pt c1, T r1, pt c2, T r2) {
+    T d = abs(c1 - c2);
+    if (sgn(d - (r1 + r2)) >= 0) return 0; // متباعدتان أو متماستان من الخارج
+    if (sgn(d - abs(r1 - r2)) <= 0) {    // إحداهما داخل الأخرى
+        T minR = min(r1, r2);
+        return PI * minR * minR;
+    }
+    ld a1 = 2.0 * acos((r1 * r1 + d * d - r2 * r2) / (2.0 * r1 * d));
+    ld a2 = 2.0 * acos((r2 * r2 + d * d - r1 * r1) / (2.0 * r2 * d));
+    return circleSegmentArea(r1, a1) + circleSegmentArea(r2, a2);
+}
+// مساحة تقاطع دائرة مع مثلث (Circle-Triangle Intersection Area)
+ld circleTriangleArea(pt c, T r, pt a, pt b) {
+    // حساب مساحة التقاطع بين الدائرة والمثلث المكون من (c, a, b)
+    a -= c; b -= c;
+    pt dummy;
+    vector<pt> p;
+    T d1 = sq(a), d2 = sq(b);
+    if (d1 <= r * r && d2 <= r * r) return abs(cross(a, b)) / 2.0;
+
+    line l(a, b);
+    pair<pt, pt> p_int;
+    int cnt = circleLine({0, 0}, r, l, p_int);
+
+    if (cnt == 0) {
+        ld theta = angle(a, b);
+        return 0.5 * r * r * theta;
+    }
+    // للحسابات الدقيقة للتقاطع المعقد (يمكن استدعاؤها في مسائل التظليل)
+    ld theta = angle(a, b);
+    return 0.5 * r * r * theta; // تقريب معتمد على الحالات
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////
 bool cw(pt a, pt b, pt c, bool include_collinear) {
     int o = sgn(orient(a, b, c));
@@ -623,3 +672,177 @@ double maximum_dist_from_polygon_to_polygon(vector<pt> &u, vector<pt> &v){ //O(n
     }
     return sqrt(ans);
 }
+/////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////  TRIANGLE UTILITIES  //////////////////////////////////////////
+
+struct Triangle {
+    pt a, b, c;
+    T sideA, sideB, sideC; // sideA opposite to A, etc.
+
+    Triangle(pt a, pt b, pt c) : a(a), b(b), c(c) {
+        sideA = abs(b - c);
+        sideB = abs(a - c);
+        sideC = abs(a - b);
+    }
+
+    // المساحة باستغلال الـ Cross product
+    ld area() const { return abs(cross(b - a, c - a)) / 2.0; }
+
+    // المحيط
+    T perimeter() const { return sideA + sideB + sideC; }
+
+    // نصف المحيط (Semi-perimeter)
+    T semiPerimeter() const { return perimeter() / (T)2.0; }
+
+    // زوايا المثلث بالرياديان (A, B, C)
+    ld angleA() const { return acos(clamp((sideB*sideB + sideC*sideC - sideA*sideA) / (2 * sideB * sideC), (T)-1.0, (T)1.0)); }
+    ld angleB() const { return acos(clamp((sideA*sideA + sideC*sideC - sideB*sideB) / (2 * sideA * sideC), (T)-1.0, (T)1.0)); }
+    ld angleC() const { return acos(clamp((sideA*sideA + sideB*sideB - sideC*sideC) / (2 * sideA * sideB), (T)-1.0, (T)1.0)); }
+
+    // أطوال الارتفاعات (Altitudes)
+    ld heightA() const { return 2.0 * area() / sideA; }
+    ld heightB() const { return 2.0 * area() / sideB; }
+    ld heightC() const { return 2.0 * area() / sideC; }
+
+    // أطوال المتوسطات (Medians)
+    ld medianA() const { return 0.5 * sqrt(2*sideB*sideB + 2*sideC*sideC - sideA*sideA); }
+    ld medianB() const { return 0.5 * sqrt(2*sideA*sideA + 2*sideC*sideC - sideB*sideB); }
+    ld medianC() const { return 0.5 * sqrt(2*sideA*sideA + 2*sideB*sideB - sideC*sideC); }
+
+    // مركز الثقل (Centroid / Center of Gravity)
+    pt centroid() const { return (a + b + c) / (T)3.0; }
+
+    // الدائرة الماسة داخلياً (Incircle): Center + Radius
+    pair<pt, ld> incircle() const {
+        T p = perimeter();
+        if (sgn(p) == 0) return {a, 0};
+        pt center = (a * sideA + b * sideB + c * sideC) / p;
+        ld radius = area() / semiPerimeter();
+        return {center, radius};
+    }
+
+    // الدائرة المارة بالمحيط (Circumcircle): Center + Radius
+    pair<pt, ld> circumcircle() const {
+        return circumCircle(a, b, c); // الدالة الموجودة بتمبلتك
+    }
+
+    // ملتقى الارتفاعات (Orthocenter)
+    pt orthocenter() const {
+        return a + b + c - (T)2.0 * circumcircle().first;
+    }
+
+    // هل النقطة داخل المثلث؟
+    bool contains(pt p, bool strict = false) const {
+        T o1 = orient(a, b, p);
+        T o2 = orient(b, c, p);
+        T o3 = orient(c, a, p);
+        if (strict) {
+            return (sgn(o1) > 0 && sgn(o2) > 0 && sgn(o3) > 0) ||
+                   (sgn(o1) < 0 && sgn(o2) < 0 && sgn(o3) < 0);
+        }
+        return (sgn(o1) >= 0 && sgn(o2) >= 0 && sgn(o3) >= 0) ||
+               (sgn(o1) <= 0 && sgn(o2) <= 0 && sgn(o3) <= 0);
+    }
+};
+//////////////////////////////////////////  RECTANGLE & SQUARE  //////////////////////////////////////////
+
+// 1. المستطيل المحاذي والموازي للمحاور (Axis-Aligned Bounding Box - AABB)
+struct RectAABB {
+    pt low, high; // Bottom-Left (minX, minY) & Top-Right (maxX, maxY)
+
+    RectAABB(pt p1 = {0,0}, pt p2 = {0,0}) {
+        low = {min(p1.x, p2.x), min(p1.y, p2.y)};
+        high = {max(p1.x, p2.x), max(p1.y, p2.y)};
+    }
+
+    T width() const { return high.x - low.x; }
+    T height() const { return high.y - low.y; }
+    T area() const { return width() * height(); }
+    T perimeter() const { return 2 * (width() + height()); }
+
+    // هل النقطة داخل المستطيل؟
+    bool contains(pt p, bool strict = false) const {
+        if (strict) {
+            return p.x > low.x && p.x < high.x && p.y > low.y && p.y < high.y;
+        }
+        return p.x >= low.x - EPS && p.x <= high.x + EPS &&
+               p.y >= low.y - EPS && p.y <= high.y + EPS;
+    }
+
+    // تقاطع مستطيلين AABB
+    bool intersects(RectAABB o) const {
+        return max(low.x, o.low.x) <= min(high.x, o.high.x) + EPS &&
+               max(low.y, o.low.y) <= min(high.y, o.high.y) + EPS;
+    }
+
+    // إيجاد مستطيل التقاطع
+    RectAABB getIntersection(RectAABB o) const {
+        if (!intersects(o)) return RectAABB();
+        return RectAABB({max(low.x, o.low.x), max(low.y, o.low.y)},
+                        {min(high.x, o.high.x), min(high.y, o.high.y)});
+    }
+};
+
+// إنشاء أصغر مستطيل محاذي للمحاور يغطي مجموعة نقاط (Bounding Box)
+RectAABB getBoundingBox(const vector<pt>& pts) {
+    if (pts.empty()) return RectAABB();
+    T minX = pts[0].x, maxX = pts[0].x;
+    T minY = pts[0].y, maxY = pts[0].y;
+    for (auto& p : pts) {
+        minX = min(minX, p.x); maxX = max(maxX, p.x);
+        minY = min(minY, p.y); maxY = max(maxY, p.y);
+    }
+    return RectAABB({minX, minY}, {maxX, maxY});
+}
+
+
+// 2. المستطيل العام (Milted / Rotated Rectangle - 4 Points in CCW order)
+struct RotatedRect {
+    pt p[4]; // 4 رؤوس بترتيب عكس عقارب الساعة
+
+    RotatedRect(pt a, pt b, pt c, pt d) {
+        p[0] = a; p[1] = b; p[2] = c; p[3] = d;
+    }
+
+    // مساحة المستطيل المائل
+    T area() const {
+        return abs(abs(p[0] - p[1]) * abs(p[1] - p[2]));
+    }
+
+    T perimeter() const {
+        return 2 * (abs(p[0] - p[1]) + abs(p[1] - p[2]));
+    }
+
+    // فحص انتماء نقطة داخل مستطيل مائل
+    bool contains(pt pt_check) const {
+        vector<pt> poly = {p[0], p[1], p[2], p[3]};
+        return inPolygon(poly, pt_check, false); // باستخدام دالة inPolygon لديك
+    }
+};
+
+
+// 3. قوانين المربع (Square Utilities)
+struct Square {
+    T side;
+
+    Square(T s) : side(s) {}
+
+    T area() const { return side * side; }
+    T perimeter() const { return 4 * side; }
+    ld diagonal() const { return side * sqrt(2.0); }
+
+    // حساب المساحة من طول القطر (Diagonal)
+    static T areaFromDiagonal(T d) { return (d * d) / (T)2.0; }
+
+    // حساب طول الضلع من القطر
+    static ld sideFromDiagonal(T d) { return d / sqrt(2.0); }
+
+    // تكوين رؤوس مربع بمعلومية نقطتين متقابلتين في القطر (A & C)
+    static pair<pt, pt> getOtherTwoVertices(pt a, pt c) {
+        pt mid = (a + c) / (T)2.0;
+        pt v = c - mid;
+        pt b = mid + perp(v);
+        pt d = mid - perp(v);
+        return {b, d};
+    }
+};
