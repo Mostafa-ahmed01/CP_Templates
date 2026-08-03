@@ -846,3 +846,103 @@ struct Square {
         return {b, d};
     }
 };
+////////////////////////////////////////// POLYGON CUTTING //////////////////////////////////////////
+
+// cuts polygon by line AB and keeps the left side (orient >= 0)
+vector<pt> cutPolygon(const vector<pt>& poly, pt a, pt b) {
+    vector<pt> res;
+    int n = poly.size();
+    for (int i = 0; i < n; i++) {
+        pt cur = poly[i], next_pt = poly[(i + 1) % n];
+        T side1 = orient(a, b, cur);
+        T side2 = orient(a, b, next_pt);
+
+        if (side1 >= -EPS) res.push_back(cur); // Point is on the left or on the line
+        if (sgn(side1) * sgn(side2) < 0) {    // Segment crosses the line
+            pt out;
+            inter(line(a, b), line(cur, next_pt), out);
+            res.push_back(out);
+        }
+    }
+    return res;
+}
+////////////////////////////////////////// POLYGON CENTROID //////////////////////////////////////////
+
+pt polygonCentroid(const vector<pt>& poly) {
+    pt c = {0, 0};
+    T totalArea = 0;
+    int n = poly.size();
+    for (int i = 0; i < n; i++) {
+        pt p1 = poly[i], p2 = poly[(i + 1) % n];
+        T a = cross(p1, p2);
+        totalArea += a;
+        c = c + (p1 + p2) * a;
+    }
+    if (sgn(totalArea) == 0) return poly[0];
+    return c / (totalArea * 3.0);
+}
+////////////////////////////////////////// CLOSEST PAIR OF POINTS //////////////////////////////////////////
+
+ld closestPair(vector<pt> pts) {
+    int n = pts.size();
+    if (n <= 1) return 1e18;
+
+    // Sort by X coordinate
+    sort(pts.begin(), pts.end(), [](pt a, pt b) {
+        if (fabs(a.x - b.x) > EPS) return a.x < b.x;
+        return a.y < b.y;
+    });
+
+    ld minD = 1e18;
+    auto cmpY = [](pt a, pt b) {
+        if (fabs(a.y - b.y) > EPS) return a.y < b.y;
+        return a.x < b.x;
+    };
+    set<pt, decltype(cmpY)> active(cmpY);
+
+    int left = 0;
+    for (int i = 0; i < n; i++) {
+        while (pts[i].x - pts[left].x >= minD) {
+            active.erase(pts[left++]);
+        }
+        auto it1 = active.lower_bound(pt(-1e18, pts[i].y - minD));
+        auto it2 = active.upper_bound(pt(1e18, pts[i].y + minD));
+        for (auto it = it1; it != it2; ++it) {
+            minD = min(minD, abs(pts[i] - *it));
+        }
+        active.insert(pts[i]);
+    }
+    return minD;
+}
+////////////////////////////////////////// MAX INSCRIBED CIRCLE //////////////////////////////////////////
+
+// البحث عن أقصى نصف قطر دائرة تسع داخل مضلع محدب
+pair<pt, ld> maxInscribedCircle(const vector<pt>& poly) {
+    ld low = 0, high = 1e9, bestR = 0;
+    pt bestCenter = poly[0];
+
+    for (int iter = 0; iter < 60; iter++) { // Precision up to 10^-15
+        ld r = low + (high - low) / 2.0;
+        vector<Halfplane> H;
+        int n = poly.size();
+        for (int i = 0; i < n; i++) {
+            pt p1 = poly[i], p2 = poly[(i + 1) % n];
+            pt v = p2 - p1;
+            pt n_vec = perp(v) / abs(v); // Normal vector facing left
+            // Shift halfplane line to the right by r
+            pt p1_shifted = p1 + n_vec * r;
+            pt p2_shifted = p2 + n_vec * r;
+            H.push_back(Halfplane(p1_shifted, p2_shifted));
+        }
+
+        vector<pt> box = hp_intersect(H);
+        if (!box.empty()) {
+            bestR = r;
+            bestCenter = polygonCentroid(box);
+            low = r;
+        } else {
+            high = r;
+        }
+    }
+    return {bestCenter, bestR};
+}
